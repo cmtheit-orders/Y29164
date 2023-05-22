@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h>
 
 #define STAGE_NUM_ONE 1						  /* stage numbers */
 #define STAGE_NUM_TWO 2
@@ -21,7 +22,7 @@
 typedef struct {
     int  number;
 	char join_time[5];
-    char hashtags[10][20];
+    char hashtags[10][21];
     size_t hash_tag_num;
     int friendship[MAX_USER_NUM];
 } user_t;
@@ -29,7 +30,29 @@ typedef struct {
 user_t users[MAX_USER_NUM] = {0};
 size_t user_num = 0;
 
-typedef int data_t;							  /* to be modified for Stage 4 */
+double user_soc(user_t * u1, user_t * u2) {
+    if (u1->friendship[u2->number]) {
+        int inter = 0;
+        int uni = 0;
+        for (int i = 0; i < user_num; ++i) {
+            if (u1->friendship[i] && u2->friendship[i]) {
+                inter++;
+            }
+            if (u1->friendship[i] || u2->friendship[i]) {
+                uni++;
+            }
+        }
+        return inter * 1.0 / uni;
+    } else {
+        return 0.0;
+    }
+}
+
+void user_strength_print(double strength) {
+    printf("%4.2lf", strength);
+}
+
+typedef char * data_t;							  /* to be modified for Stage 4 */
 
 /* linked list type definitions below, from
    https://people.eng.unimelb.edu.au/ammoffat/ppsaa/c/listops.c
@@ -134,7 +157,14 @@ stage_two() {
 	/* add code for stage 2 */
 	/* print stage header */
 	print_stage_header(STAGE_NUM_TWO);
-
+    for (int i = 0; i < user_num; ++i){
+        for (int j = 0; j < user_num; ++j){
+            scanf("%d", users[i].friendship + j);
+        }
+    }
+    printf("Strength of connection between u0 and u1: ");
+    user_strength_print(user_soc(users + 0, users + 1));
+    printf("\n");
 	printf("\n");
 }
 
@@ -144,7 +174,13 @@ stage_three() {
 	/* add code for stage 3 */
 	/* print stage header */
 	print_stage_header(STAGE_NUM_THREE);
-
+    for (int i = 0; i < user_num; ++i) {
+        for (int j = 0; j < user_num; ++j) {
+            user_strength_print(user_soc(users + i, users + j));
+            printf(" ");
+        }
+        printf("\n");
+    }
 	printf("\n");
 }
 
@@ -153,7 +189,37 @@ void stage_four() {
 	/* add code for stage 4 */
 	/* print stage header */
 	print_stage_header(STAGE_NUM_FOUR);
-
+    double ths;
+    int thc;
+    scanf("%lf%d", &ths, &thc);
+    for (int i = 0; i < user_num; ++i) {
+        int friendship = 0;
+        for (int j = 0; j < user_num; ++j) {
+            if (user_soc(users + i, users + j) > ths) {
+                friendship++;
+            }
+        }
+        if (friendship > thc) {
+            list_t * hashtags = make_empty_list();
+            for (int k = 0; k < users[i].hash_tag_num; ++k) {
+                insert_unique_in_order(hashtags, users[i].hashtags[k]);
+            }
+            printf("Stage 4.1. Core user: u%d; close friends: ", i);
+            for (int j = 0; j < user_num; ++j) {
+                if (user_soc(users + i, users + j) > ths) {
+                    printf("u%d ", j);
+                    for (int k = 0; k < users[j].hash_tag_num; ++k) {
+                        insert_unique_in_order(hashtags, users[j].hashtags[k]);
+                    }
+                }
+            }
+            printf("\n");
+            printf("Stage 4.2. Hashtags:\n");
+            print_list(hashtags);
+            printf("\n");
+            free_list(hashtags);
+        }
+    }
 	printf("\n");
 }
 
@@ -204,14 +270,6 @@ free_list(list_t *list) {
 */
 list_t
 *insert_unique_in_order(list_t *list, data_t value) {
-	/* the following code inserts a new node to the end of list.
-		Modify it to suit Stage 4.2. Start by modifying it to
-		insert a new node while keeping an alphabetical order
-		(think about how to insert in the middle of a list),
-		then, only insert when value is not in list already.
-		[remove this comment to save line space if needed]
-	*/
-
 	node_t *new;
 
 	new = (node_t*)malloc(sizeof(*new));
@@ -223,10 +281,29 @@ list_t
 		/* this is the first insertion into the list */
 		list->head = list->foot = new;
 	} else {
-		list->foot->next = new;
-		list->foot = new;
+        node_t * crt = list->head;
+        int cmp_result = strcmp(value, crt->data);
+        if (cmp_result < 0) {
+            new->next = list->head;
+            list->head = new;
+        } else {
+            while (crt->next) {
+                cmp_result = strcmp(value, crt->next->data);
+                if (cmp_result <= 0) {
+                    break;
+                } else {
+                    crt = crt->next;
+                }
+            }
+            if (cmp_result != 0) {
+                new->next = crt->next;
+                crt->next = new;
+                if (!crt->next) {
+                    list->foot = new;
+                }
+            }
+        }
 	}
-
 	return list;
 }
 
@@ -234,12 +311,23 @@ list_t
 void
 print_list(list_t *list) {
 	/* add code to print list */
+    if (list) {
+        node_t * head = list->head;
+        while (head) {
+            printf("#%s ", head->data);
+            head = head->next;
+        }
+    }
 }
-
 /****************************************************************/
 /*
 	Write your time complexity analysis below for Stage 4.2,
 	assuming U users, C core users, H hashtags per user,
 	and a maximum length of T characters per hashtag:
 
+    in source code we can conclude: O(stage_four) = O(U * (U * O(user_soc) + U * (O(user_soc) + H * O(intersection))))
+    while `O(user_soc)` is equal to: O(U)
+    and `O(intersection)` is equal to: O(H * T)
+    so
+        O(stage_four) = O(U ^ 3 + U * H * T)
 */
